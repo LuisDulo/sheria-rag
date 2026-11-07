@@ -1,153 +1,213 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { Answer, Sources } from "./Answer";
-import { askQuestion, ChatEvent, Passage } from "./chat";
-import { AlertIcon, InfoIcon, SearchIcon, SendIcon } from "./Icons";
+import { askQuestion, ChatEvent, FieldId } from "./chat";
+import { Composer } from "./Composer";
+import { FIELDS, fieldById } from "./fields";
+import { ChatIcon, CloseIcon, FieldIcon, Logo, MenuIcon, PlusIcon } from "./Icons";
+import { ChatMessage, Message } from "./Message";
+import { FieldPicker, FieldStart } from "./Welcome";
 
-interface Turn {
-  question: string;
-  sources: Passage[];
-  answer: string;
-  cited: number[];
-  notice?: string;
-  error?: string;
-  finished: boolean;
+interface Chat {
+  id: number;
+  field: FieldId;
+  title: string;
+  messages: ChatMessage[];
 }
 
-const EXAMPLES = [
-  "When must employers remit PAYE?",
-  "How much tax do landlords pay on rent?",
-  "When do I start repaying my HELB loan?",
-  "How do I register for SHA?",
-];
+const SERVER_ERROR = "Could not reach the server. Please try again.";
+let nextId = 1;
 
-function applyEvent(turn: Turn, event: ChatEvent): Turn {
+function applyEvent(message: ChatMessage, event: ChatEvent): ChatMessage {
   switch (event.event) {
-    case "sources":
-      return { ...turn, sources: event.data };
     case "delta":
-      return { ...turn, answer: turn.answer + event.data.text };
-    case "notice":
-      return { ...turn, notice: event.data.message };
+      return { ...message, text: message.text + event.data.text };
     case "done":
-      return { ...turn, cited: event.data.cited, finished: true };
+      return { ...message, streaming: false };
     case "error":
-      return { ...turn, error: event.data.message, finished: true };
+      return { ...message, error: event.data.message, streaming: false };
   }
 }
 
 export function App() {
-  const [turns, setTurns] = useState<Turn[]>([]);
-  const [draft, setDraft] = useState("");
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [field, setField] = useState<FieldId | null>(null);
   const [busy, setBusy] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    endRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" });
-  }, [turns]);
+  const active = chats.find((chat) => chat.id === activeId) ?? null;
 
-  const updateLast = (change: (turn: Turn) => Turn) =>
-    setTurns((all) => [...all.slice(0, -1), change(all[all.length - 1])]);
+  useEffect(() => {
+    endRef.current?.scrollIntoView?.({ block: "end" });
+  }, [active?.messages]);
+
+  function updateMessage(chatId: number, messageId: number, change: (m: ChatMessage) => ChatMessage) {
+    setChats((all) =>
+      all.map((chat) =>
+        chat.id === chatId
+          ? {
+              ...chat,
+              messages: chat.messages.map((m) => (m.id === messageId ? change(m) : m)),
+            }
+          : chat,
+      ),
+    );
+  }
 
   async function send(question: string) {
-    const text = question.trim();
-    if (text.length < 3 || busy) return;
+    if (busy || !field) return;
+    const user: ChatMessage = { id: nextId++, role: "user", text: question };
+    const reply: ChatMessage = { id: nextId++, role: "assistant", text: "", streaming: true };
+    const chatId = active?.id ?? nextId++;
+    setChats((all) =>
+      active
+        ? all.map((chat) =>
+            chat.id === chatId ? { ...chat, messages: [...chat.messages, user, reply] } : chat,
+          )
+        : [{ id: chatId, field, title: question, messages: [user, reply] }, ...all],
+    );
+    setActiveId(chatId);
     setBusy(true);
-    setDraft("");
-    setTurns((all) => [
-      ...all,
-      { question: text, sources: [], answer: "", cited: [], finished: false },
-    ]);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      await askQuestion(text, (event) => updateLast((turn) => applyEvent(turn, event)));
+      await askQuestion(
+        question,
+        field,
+        (event) => updateMessage(chatId, reply.id, (m) => applyEvent(m, event)),
+        controller.signal,
+      );
+      updateMessage(chatId, reply.id, (m) => ({ ...m, streaming: false }));
     } catch {
-      updateLast((turn) => ({
-        ...turn,
-        error: "Could not reach the server. Please try again.",
-        finished: true,
+      const stopped = controller.signal.aborted;
+      updateMessage(chatId, reply.id, (m) => ({
+        ...m,
+        streaming: false,
+        text: stopped && !m.text ? "Stopped." : m.text,
+        error: stopped ? undefined : SERVER_ERROR,
       }));
     } finally {
       setBusy(false);
     }
   }
 
-  function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    void send(draft);
+  function startNew(nextField: FieldId | null) {
+    abortRef.current?.abort();
+    setActiveId(null);
+    setField(nextField);
+    setMenuOpen(false);
+  }
+
+  function openChat(chat: Chat) {
+    setActiveId(chat.id);
+    setField(chat.field);
+    setMenuOpen(false);
   }
 
   return (
-    <div className="page">
-      <header className="masthead">
-        <h1>Sheria</h1>
-        <p>Answers on Kenyan tax, SHA and HELB rules, drawn from official guidance.</p>
-      </header>
-
-      <main className="thread" aria-live="polite">
-        {turns.length === 0 && (
-          <section className="empty">
-            <h2>Try asking</h2>
-            <div className="examples">
-              {EXAMPLES.map((example) => (
-                <button key={example} type="button" onClick={() => void send(example)}>
-                  {example}
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {turns.map((turn, index) => (
-          <article className="turn" key={index}>
-            <h2 className="question">{turn.question}</h2>
-            {!turn.finished && !turn.answer && (
-              <p className="status">
-                <SearchIcon /> Searching official pages
-              </p>
-            )}
-            {turn.answer && (
-              <Answer turnId={index} text={turn.answer} sourceCount={turn.sources.length} />
-            )}
-            {turn.notice && (
-              <p className="status">
-                <InfoIcon /> {turn.notice}
-              </p>
-            )}
-            {turn.error && (
-              <p className="error" role="alert">
-                <AlertIcon /> {turn.error}
-              </p>
-            )}
-            <Sources
-              turnId={index}
-              sources={turn.sources}
-              cited={turn.cited}
-              expanded={!turn.answer}
-            />
-          </article>
-        ))}
-        <div ref={endRef} />
-      </main>
-
-      <form className="composer" onSubmit={onSubmit}>
-        <label htmlFor="question" className="visually-hidden">
-          Your question
-        </label>
-        <input
-          id="question"
-          value={draft}
-          maxLength={500}
-          placeholder="Ask about PAYE, VAT, SHA or your HELB loan"
-          onChange={(event) => setDraft(event.target.value)}
+    <div className="app">
+      <div className="flag-stripe" aria-hidden="true" />
+      {menuOpen && (
+        <button
+          type="button"
+          className="scrim"
+          aria-label="Close menu"
+          onClick={() => setMenuOpen(false)}
         />
-        <button type="submit" disabled={busy || draft.trim().length < 3}>
-          <SendIcon /> Ask
+      )}
+
+      <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
+        <div className="brand">
+          <Logo />
+          <span>Sheria</span>
+          <button
+            type="button"
+            className="icon-button menu-close"
+            aria-label="Close menu"
+            onClick={() => setMenuOpen(false)}
+          >
+            <CloseIcon />
+          </button>
+        </div>
+
+        <button type="button" className="new-chat" onClick={() => startNew(null)}>
+          <PlusIcon /> New chat
         </button>
-      </form>
-      <p className="disclaimer">
-        <InfoIcon /> General information only, not tax, legal or financial advice. Rates change, so confirm with
-        the agency before acting.
-      </p>
+
+        <nav aria-label="Topics">
+          <h2>Topics</h2>
+          {FIELDS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`side-item ${field === item.id ? "current" : ""}`}
+              aria-current={field === item.id ? "true" : undefined}
+              onClick={() => startNew(item.id)}
+            >
+              <FieldIcon field={item.id} /> {item.name}
+            </button>
+          ))}
+        </nav>
+
+        {chats.length > 0 && (
+          <nav className="history" aria-label="Chats">
+            <h2>Chats</h2>
+            {chats.map((chat) => (
+              <button
+                key={chat.id}
+                type="button"
+                className={`side-item ${chat.id === activeId ? "current" : ""}`}
+                onClick={() => openChat(chat)}
+              >
+                <ChatIcon /> <span className="side-title">{chat.title}</span>
+              </button>
+            ))}
+          </nav>
+        )}
+      </aside>
+
+      <main className="main">
+        <header className="topbar">
+          <button
+            type="button"
+            className="icon-button menu-open"
+            aria-label="Open menu"
+            onClick={() => setMenuOpen(true)}
+          >
+            <MenuIcon />
+          </button>
+          {field && (
+            <span className="topic">
+              <FieldIcon field={field} /> {fieldById(field).name}
+            </span>
+          )}
+        </header>
+
+        <div className="scroll">
+          {!field && <FieldPicker onPick={(picked) => startNew(picked)} />}
+          {field && !active && <FieldStart field={field} onAsk={(q) => void send(q)} />}
+          {active && (
+            <div className="thread" aria-live="polite">
+              {active.messages.map((message) => (
+                <Message key={message.id} message={message} />
+              ))}
+              <div ref={endRef} />
+            </div>
+          )}
+        </div>
+
+        {field && (
+          <Composer
+            placeholder={fieldById(field).placeholder}
+            busy={busy}
+            onSend={(text) => void send(text)}
+            onStop={() => abortRef.current?.abort()}
+          />
+        )}
+      </main>
     </div>
   );
 }
