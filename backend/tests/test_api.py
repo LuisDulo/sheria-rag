@@ -23,7 +23,7 @@ def parse(body):
 
 @pytest.fixture
 def api(monkeypatch):
-    monkeypatch.setattr(main, "find_passages", lambda question, embedder: [PASSAGE])
+    monkeypatch.setattr(main, "find_passages", lambda question, field, embedder: [PASSAGE])
     app.dependency_overrides[get_embedder] = FakeEmbedder
     yield TestClient(app)
     app.dependency_overrides.clear()
@@ -54,6 +54,20 @@ def test_model_failure_arrives_as_an_error_event(api):
     use_model(FakeClient(stop_reason="refusal"))
     events = parse(api.post("/api/chat", json={"question": "When is PAYE due?"}).text)
     assert events[-1][0] == "error"
+
+
+def test_passes_the_chosen_field_to_search(api, monkeypatch):
+    seen = []
+    monkeypatch.setattr(main, "find_passages", lambda q, field, e: seen.append(field) or [PASSAGE])
+    use_model(None)
+    api.post("/api/chat", json={"question": "When is it due?", "field": "helb"})
+    assert seen == ["helb"]
+
+
+def test_rejects_an_unknown_field(api):
+    use_model(None)
+    response = api.post("/api/chat", json={"question": "When is it due?", "field": "land"})
+    assert response.status_code == 422
 
 
 @pytest.mark.parametrize("question", ["", "hi", "x" * 501])

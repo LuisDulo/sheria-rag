@@ -23,6 +23,19 @@ def titles(passages):
     return [passage.title for passage in passages]
 
 
+def test_field_limits_search_to_one_agency(conn):
+    embedder = load(conn)
+    source = Source("HELB", "Loans", "https://site.test/loans")
+    store(conn, source, [Chunk("", "Repay your student loan to HELB monthly.")], embedder)
+    for mode in ("vector", "text", "hybrid"):
+        assert titles(search(conn, embedder, "pay monthly", mode=mode, field="helb")) == ["Loans"]
+
+
+def test_field_with_no_documents_returns_nothing(conn):
+    embedder = load(conn)
+    assert search(conn, embedder, "PAYE", field="sha") == []
+
+
 def test_fuse_prefers_items_found_by_both_rankings():
     assert fuse([([1, 2, 3], 1.0), ([3, 4, 1], 1.0)], limit=2) == [1, 3]
 
