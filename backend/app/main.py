@@ -10,6 +10,7 @@ from app.answer import get_client, stream_answer
 from app.config import get_settings
 from app.db import connect
 from app.embeddings import Embedder, get_embedder
+from app.retrieval import Field as SearchField
 from app.retrieval import Passage, search
 
 NO_KEY_NOTICE = "Written answers are switched off, so here are the closest official passages."
@@ -19,11 +20,12 @@ app = FastAPI(title="Sheria RAG")
 
 class ChatRequest(BaseModel):
     question: str = Field(min_length=3, max_length=500)
+    field: SearchField | None = None
 
 
-def find_passages(question: str, embedder: Embedder) -> list[Passage]:
+def find_passages(question: str, field: SearchField | None, embedder: Embedder) -> list[Passage]:
     with connect() as conn:
-        return search(conn, embedder, question)
+        return search(conn, embedder, question, field=field)
 
 
 def answer_client():
@@ -59,7 +61,7 @@ def chat(
 ) -> StreamingResponse:
     # Retrieval runs before the response starts, so a database failure is a clean 500
     # and no connection is held open while the model streams.
-    passages = find_passages(request.question, embedder)
+    passages = find_passages(request.question, request.field, embedder)
     return StreamingResponse(
         chat_events(request.question, passages, client),
         media_type="text/event-stream",

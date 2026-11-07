@@ -8,6 +8,8 @@ import psycopg
 from app.embeddings import Embedder
 
 Mode = Literal["vector", "text", "hybrid"]
+Field = Literal["tax", "sha", "helb"]
+FIELD_AGENCY: dict[str, str] = {"tax": "KRA", "sha": "SHA", "helb": "HELB"}
 RRF_K = 60  # the constant from the original reciprocal rank fusion paper
 TEXT_WEIGHT = 0.1  # the best hybrid weight in the benchmark; see the README
 
@@ -25,27 +27,40 @@ class Passage:
         return asdict(self)
 
 
-def vector_ranking(conn: psycopg.Connection, embedding, limit: int) -> list[int]:
+def vector_ranking(
+    conn: psycopg.Connection, embedding, limit: int, agency: str | None = None
+) -> list[int]:
+    # The HNSW index is scanned before the agency filter applies, so it must look further
+    # than its default or a small agency could come back with too few passages.
+    conn.execute("SET LOCAL hnsw.ef_search = 400")
     rows = conn.execute(
-        "SELECT id FROM chunks ORDER BY embedding <=> %s LIMIT %s", (embedding, limit)
+        """
+        SELECT c.id FROM chunks c JOIN documents d ON d.id = c.document_id
+        WHERE %(agency)s::text IS NULL OR d.agency = %(agency)s
+        ORDER BY c.embedding <=> %(embedding)s
+        LIMIT %(limit)s
+        """,
+        {"agency": agency, "embedding": embedding, "limit": limit},
     ).fetchall()
     return [row[0] for row in rows]
 
 
-def text_ranking(conn: psycopg.Connection, query: str, limit: int) -> list[int]:
+def text_ranking(
+    conn: psycopg.Connection, query: str, limit: int, agency: str | None = None
+) -> list[int]:
     # plainto_tsquery requires every word to match, which almost no question satisfies.
     # Matching any word and ranking by relevance suits natural-language questions.
     rows = conn.execute(
         """
         WITH q AS (
-            SELECT replace(plainto_tsquery('english', %s)::text, '&', '|')::tsquery AS terms
+            SELECT replace(plainto_tsquery('english', %(query)s)::text, '&', '|')::tsquery AS terms
         )
-        SELECT id FROM chunks, q
-        WHERE search @@ q.terms
-        ORDER BY ts_rank_cd(search, q.terms) DESC, id
-        LIMIT %s
+        SELECT c.id FROM chunks c JOIN documents d ON d.id = c.document_id, q
+        WHERE c.search @@ q.terms AND (%(agency)s::text IS NULL OR d.agency = %(agency)s)
+        ORDER BY ts_rank_cd(c.search, q.terms) DESC, c.id
+        LIMIT %(limit)s
         """,
-        (query, limit),
+        {"query": query, "agency": agency, "limit": limit},
     ).fetchall()
     return [row[0] for row in rows]
 
@@ -80,10 +95,12 @@ def search(
     mode: Mode = "vector",  # measured best on the benchmark; hybrid did not improve on it
     pool: int = 30,
     text_weight: float = TEXT_WEIGHT,
+    field: Field | None = None,
 ) -> list[Passage]:
+    agency = FIELD_AGENCY[field] if field else None
     rankings = []
     if mode in ("vector", "hybrid"):
-        rankings.append((vector_ranking(conn, embedder.embed_query(query), pool), 1.0))
+        rankings.append((vector_ranking(conn, embedder.embed_query(query), pool, agency), 1.0))
     if mode in ("text", "hybrid"):
-        rankings.append((text_ranking(conn, query, pool), text_weight))
+        rankings.append((text_ranking(conn, query, pool, agency), text_weight))
     return load_passages(conn, fuse(rankings, limit))
