@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 
+import { Answer, Sources } from "./Answer";
 import { askQuestion, ChatEvent, Passage } from "./chat";
 
 interface Turn {
@@ -99,13 +100,21 @@ export function App() {
           <article className="turn" key={index}>
             <h2 className="question">{turn.question}</h2>
             {!turn.finished && !turn.answer && <p className="status">Searching official pages…</p>}
-            {turn.answer && <p className="answer">{turn.answer}</p>}
+            {turn.answer && (
+              <Answer turnId={index} text={turn.answer} sourceCount={turn.sources.length} />
+            )}
             {turn.notice && <p className="status">{turn.notice}</p>}
             {turn.error && (
               <p className="error" role="alert">
                 {turn.error}
               </p>
             )}
+            <Sources
+              turnId={index}
+              sources={turn.sources}
+              cited={turn.cited}
+              expanded={!turn.answer}
+            />
           </article>
         ))}
         <div ref={endRef} />
@@ -126,6 +135,10 @@ export function App() {
           Ask
         </button>
       </form>
+      <p className="disclaimer">
+        General information only, not tax, legal or financial advice. Rates change, so confirm with
+        the agency before acting.
+      </p>
     </div>
   );
 }
