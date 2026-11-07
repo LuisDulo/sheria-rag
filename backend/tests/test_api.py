@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app import main
 from app.embeddings import get_embedder
-from app.main import NO_KEY_NOTICE, answer_client, app
+from app.main import answer_client, app
 from app.retrieval import Passage
 from tests.fakes import FakeEmbedder
 from tests.test_answer import FakeClient
@@ -33,21 +33,17 @@ def use_model(reply):
     app.dependency_overrides[answer_client] = lambda: reply
 
 
-def test_streams_sources_then_answer_then_done(api):
-    use_model(FakeClient(["File by the 9th ", "[1]."]))
+def test_streams_the_answer_then_done(api):
+    use_model(FakeClient(["File by ", "the 9th."]))
     response = api.post("/api/chat", json={"question": "When is PAYE due?"})
     assert response.headers["content-type"].startswith("text/event-stream")
     events = parse(response.text)
-    assert [name for name, _ in events] == ["sources", "delta", "delta", "done"]
-    assert events[0][1][0]["url"] == "https://x.test/paye"
-    assert events[-1][1] == {"cited": [1]}
+    assert [name for name, _ in events] == ["delta", "delta", "done"]
 
 
-def test_without_a_key_returns_the_passages(api):
-    use_model(None)
-    events = parse(api.post("/api/chat", json={"question": "When is PAYE due?"}).text)
-    assert [name for name, _ in events] == ["sources", "notice", "done"]
-    assert events[1][1] == {"message": NO_KEY_NOTICE}
+def test_sources_are_not_sent_to_the_client(api):
+    use_model(FakeClient(["File by the 9th."]))
+    assert "x.test" not in api.post("/api/chat", json={"question": "When is PAYE due?"}).text
 
 
 def test_model_failure_arrives_as_an_error_event(api):

@@ -1,6 +1,6 @@
 """Find passages by meaning (pgvector) and by exact terms (full-text), then fuse the rankings."""
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Literal
 
 import psycopg
@@ -22,9 +22,6 @@ class Passage:
     url: str
     heading: str
     content: str
-
-    def to_dict(self) -> dict:
-        return asdict(self)
 
 
 def vector_ranking(

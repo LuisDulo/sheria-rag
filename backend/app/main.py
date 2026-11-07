@@ -13,7 +13,7 @@ from app.embeddings import Embedder, get_embedder
 from app.retrieval import Field as SearchField
 from app.retrieval import Passage, search
 
-NO_KEY_NOTICE = "Written answers are switched off, so here are the closest official passages."
+NO_KEY_MESSAGE = "Written answers are switched off because no API key is set."
 
 app = FastAPI(title="Sheria RAG")
 
@@ -33,15 +33,14 @@ def answer_client():
     return get_client() if get_settings().anthropic_api_key else None
 
 
-def sse(event: str, data: dict | list) -> str:
+def sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
 def chat_events(question: str, passages: list[Passage], client) -> Iterator[str]:
-    yield sse("sources", [passage.to_dict() for passage in passages])
     if client is None:
-        yield sse("notice", {"message": NO_KEY_NOTICE})
-        yield sse("done", {"cited": list(range(1, len(passages) + 1))})
+        yield sse("delta", {"text": NO_KEY_MESSAGE})
+        yield sse("done", {})
         return
     for event in stream_answer(question, passages, client):
         kind = event.pop("type")
