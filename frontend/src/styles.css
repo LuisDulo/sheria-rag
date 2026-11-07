@@ -125,6 +125,11 @@ input {
   font: 15px/1.5 system-ui, sans-serif;
 }
 
+.icon {
+  flex: none;
+  vertical-align: -0.125em;
+}
+
 .citation {
   display: inline-block;
   min-width: 1.4em;

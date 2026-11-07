@@ -38,6 +38,14 @@ describe("Sources", () => {
     expect(html).toContain('value="3"');
   });
 
+  it("marks source links with a decorative icon", () => {
+    const html = renderToStaticMarkup(
+      <Sources turnId={0} sources={sources} cited={[1]} expanded={false} />,
+    );
+    expect(html).toContain('<svg class="icon"');
+    expect(html).toContain('aria-hidden="true"');
+  });
+
   it("renders nothing when nothing was cited", () => {
     const html = renderToStaticMarkup(
       <Sources turnId={0} sources={sources} cited={[]} expanded={false} />,

@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { Answer, Sources } from "./Answer";
 import { askQuestion, ChatEvent, Passage } from "./chat";
+import { AlertIcon, InfoIcon, SearchIcon, SendIcon } from "./Icons";
 
 interface Turn {
   question: string;
@@ -99,14 +100,22 @@ export function App() {
         {turns.map((turn, index) => (
           <article className="turn" key={index}>
             <h2 className="question">{turn.question}</h2>
-            {!turn.finished && !turn.answer && <p className="status">Searching official pages…</p>}
+            {!turn.finished && !turn.answer && (
+              <p className="status">
+                <SearchIcon /> Searching official pages
+              </p>
+            )}
             {turn.answer && (
               <Answer turnId={index} text={turn.answer} sourceCount={turn.sources.length} />
             )}
-            {turn.notice && <p className="status">{turn.notice}</p>}
+            {turn.notice && (
+              <p className="status">
+                <InfoIcon /> {turn.notice}
+              </p>
+            )}
             {turn.error && (
               <p className="error" role="alert">
-                {turn.error}
+                <AlertIcon /> {turn.error}
               </p>
             )}
             <Sources
@@ -132,11 +141,11 @@ export function App() {
           onChange={(event) => setDraft(event.target.value)}
         />
         <button type="submit" disabled={busy || draft.trim().length < 3}>
-          Ask
+          <SendIcon /> Ask
         </button>
       </form>
       <p className="disclaimer">
-        General information only, not tax, legal or financial advice. Rates change, so confirm with
+        <InfoIcon /> General information only, not tax, legal or financial advice. Rates change, so confirm with
         the agency before acting.
       </p>
     </div>

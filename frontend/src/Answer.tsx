@@ -1,4 +1,5 @@
 import { Passage } from "./chat";
+import { ExternalLinkIcon } from "./Icons";
 
 interface AnswerProps {
   turnId: number;
@@ -54,7 +55,7 @@ export function Sources({ turnId, sources, cited, expanded }: SourcesProps) {
           return (
             <li key={number} id={sourceAnchor(turnId, number)} value={number}>
               <a href={source.url} target="_blank" rel="noopener noreferrer">
-                {source.agency}: {source.title}
+                {source.agency}: {source.title} <ExternalLinkIcon />
               </a>
               {source.heading && <span className="section"> {source.heading}</span>}
               <details open={expanded}>
