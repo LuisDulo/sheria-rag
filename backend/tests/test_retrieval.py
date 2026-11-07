@@ -24,11 +24,16 @@ def titles(passages):
 
 
 def test_fuse_prefers_items_found_by_both_rankings():
-    assert fuse([[1, 2, 3], [3, 4, 1]], limit=2) == [1, 3]
+    assert fuse([([1, 2, 3], 1.0), ([3, 4, 1], 1.0)], limit=2) == [1, 3]
 
 
 def test_fuse_honours_the_limit():
-    assert len(fuse([[1, 2, 3, 4]], limit=2)) == 2
+    assert len(fuse([([1, 2, 3, 4], 1.0)], limit=2)) == 2
+
+
+def test_fuse_lets_a_heavier_ranking_win():
+    assert fuse([([1, 2], 1.0), ([2, 1], 0.1)], limit=1) == [1]
+    assert fuse([([1, 2], 0.1), ([2, 1], 1.0)], limit=1) == [2]
 
 
 def test_text_search_finds_an_exact_term(conn):
@@ -55,7 +60,7 @@ def test_vector_search_ranks_the_closest_passage_first(conn):
 
 def test_hybrid_search_returns_full_passages_with_their_source(conn):
     embedder = load(conn)
-    passage = search(conn, embedder, "PAYE employers salaries", limit=1)[0]
+    passage = search(conn, embedder, "PAYE employers salaries", limit=1, mode="hybrid")[0]
     assert passage.title == "PAYE"
     assert passage.url == "https://site.test/PAYE"
     assert passage.content == PAGES["PAYE"]
