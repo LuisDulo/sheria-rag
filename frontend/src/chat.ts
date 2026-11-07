@@ -1,17 +1,8 @@
-export interface Passage {
-  id: number;
-  agency: string;
-  title: string;
-  url: string;
-  heading: string;
-  content: string;
-}
+export type FieldId = "tax" | "sha" | "helb";
 
 export type ChatEvent =
-  | { event: "sources"; data: Passage[] }
   | { event: "delta"; data: { text: string } }
-  | { event: "notice"; data: { message: string } }
-  | { event: "done"; data: { cited: number[] } }
+  | { event: "done"; data: Record<string, never> }
   | { event: "error"; data: { message: string } };
 
 /** Split a buffer into complete server-sent events, returning whatever is left over. */
@@ -30,13 +21,14 @@ export function parseEvents(buffer: string): { events: ChatEvent[]; rest: string
 
 export async function askQuestion(
   question: string,
+  field: FieldId,
   onEvent: (event: ChatEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const response = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, field }),
     signal,
   });
   if (!response.ok || !response.body) {

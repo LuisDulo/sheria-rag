@@ -1,6 +1,7 @@
 import json
 import re
 from collections.abc import Iterator
+from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI
@@ -18,7 +19,13 @@ from app.retrieval import Passage, search
 PASSAGES = 12
 WORDS_PER_DELTA = 3
 
-app = FastAPI(title="Sheria RAG")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    get_embedder()  # load the model now, so the first question is not slow
+    yield
+
+
+app = FastAPI(title="Sheria RAG", lifespan=lifespan)
 
 
 class ChatRequest(BaseModel):
