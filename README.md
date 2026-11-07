@@ -1,8 +1,8 @@
 # Sheria RAG
 
-A question-answering assistant for Kenyan tax, health-cover and student-loan rules. It searches official KRA, SHA and HELB guidance, then writes a short answer in which every claim links back to the passage it came from. *Sheria* is Swahili for "law".
+A chatbot for Kenyan tax, health-cover and student-loan rules. You choose a topic (Tax, SHA or HELB), ask a question in plain language, and it answers from official KRA, SHA and HELB guidance. *Sheria* is Swahili for "law".
 
-The answer is only as good as the sources, so the project is built around three rules: answer from retrieved passages only, say so when they do not cover a question, and show the reader the original source.
+It is built around one rule: answer only from the official pages, and say so when they do not cover a question.
 
 ## How it works
 
@@ -15,46 +15,71 @@ flowchart LR
     end
     D --> E[(PostgreSQL + pgvector)]
     subgraph Chat
-        F[React UI] -->|question| G[FastAPI]
-        G -->|search| E
-        G -->|passages| H[Claude]
-        H -->|streamed answer with citations| F
+        F[React UI] -->|topic and question| G[FastAPI]
+        G -->|search within topic| E
+        G --> H{API key set?}
+        H -->|yes| I[Claude explains the answer]
+        H -->|no| J[Local sentence selection]
+        I --> F
+        J --> F
     end
 ```
 
 | Folder | Responsibility |
 |---|---|
-| `backend/app/` | Fetching, extraction, embeddings, retrieval, answer generation and the API |
+| `backend/app/` | Fetching, extraction, embeddings, retrieval, answers and the API |
 | `backend/sources.json` | The official pages to ingest, with a content selector for each site |
-| `backend/eval/` | Labelled questions for the retrieval benchmark |
+| `backend/eval/` | Labelled questions for the retrieval and answer tests |
 | `backend/tests/` | Tests, run against a real PostgreSQL with pgvector |
-| `frontend/` | React chat interface |
+| `frontend/` | React chat interface in the colours of the Kenyan flag |
+
+## Two answer modes
+
+| | With `ANTHROPIC_API_KEY` | Without a key |
+|---|---|---|
+| **How** | Claude writes an explanation from the retrieved passages | Picks the sentences closest to the question |
+| **Answers read like** | A plain-language explanation | The official wording, quoted |
+| **Cost** | Paid per question | Free, runs on your machine |
+| **Off-topic questions** | The model is told to decline | Declined when similarity is below a threshold |
+| **Status** | Tested with a fake client only | Tested on real pages (below) |
 
 ## Design decisions
 
-- **Embeddings run locally** (`BAAI/bge-small-en-v1.5` through fastembed), so ingestion and search need no paid API and no key.
-- **PostgreSQL does the vector search.** One database holds documents, chunks and embeddings, so there is no separate vector store to keep in sync.
-- **Chunks follow the page's headings**, so a passage keeps the section it came from.
+- **The topic comes first.** Search only looks inside the chosen field, so a tax question cannot pull in HELB text.
+- **Embeddings run locally** (`BAAI/bge-small-en-v1.5` through fastembed), so ingestion and search need no paid API.
+- **PostgreSQL does the vector search.** One database holds documents, chunks and embeddings.
+- **The vector index looks further when filtering.** HNSW filters after it scans, so a small agency could otherwise come back with too few passages.
 - **Ingestion is safe to repeat.** Unchanged pages are skipped, changed pages are replaced in one transaction, and a failed or empty download never removes stored content.
 - **A content selector that matches nothing is an error.** An early version fell back to the whole page and stored a navigation menu as if it were guidance.
-- **Citations are checked.** A citation number that does not match a supplied passage never becomes a link.
 - **Passages are treated as data.** They come from web pages, so the prompt separates them from the question and tells the model to ignore any instructions inside them.
-- **It works without an API key.** With no key, the API returns the closest official passages instead of a written answer.
+- **Local answers look at the shape of the question.** Similarity alone cannot tell that "when" wants a time, so sentences stating a time or an amount get a bonus on those questions.
+- **Sources are not shown.** Answers stay short and direct, so the line under the composer tells people to confirm important details with the agency.
 
-## Retrieval results
+## Test results
 
-`python -m app.evaluate` runs 44 labelled questions and checks whether a passage from the correct document was retrieved. Hit@6 matters most, because the model reads six passages.
+### Answers
 
-| Search | Hit@1 | Hit@6 | MRR |
+`python -m app.evaluate_answers` asks 25 questions through the local mode and checks that each answer contains the expected fact, or declines when it should. **23 of 25 pass**, including all 5 questions that should be declined, such as a HELB question asked under Tax. The two failures:
+
+- "Who must register with SHA?" answers how to register, not who must.
+- "Which students can get undergraduate loans?" leads with application types.
+
+This set was also used to tune the local mode, so 23 of 25 is not an independent score. The check only looks for a key fact in the text, so it does not measure how well an answer reads.
+
+### Retrieval
+
+`python -m app.evaluate` runs 44 labelled questions and checks whether a passage from the correct document was retrieved. Hit@12 matters most, because the answer step reads twelve passages.
+
+| Search | Hit@1 | Hit@12 | MRR |
 |---|---|---|---|
-| **Vector (default)** | 0.84 | **0.98** | 0.88 |
-| Hybrid, text weight 0.1 | **0.86** | 0.95 | **0.89** |
-| Hybrid, text weight 1.0 | 0.75 | 0.93 | 0.83 |
-| Full-text only | 0.55 | 0.84 | 0.64 |
+| **Vector (default)** | 0.84 | 0.98 | 0.88 |
+| Hybrid, text weight 0.1 | **0.86** | 0.98 | **0.89** |
+| Hybrid, text weight 1.0 | 0.75 | **1.00** | 0.84 |
+| Full-text only | 0.55 | 0.95 | 0.66 |
 
-I expected hybrid search to win, and built it first. It did not: equal-weight fusion was clearly worse, because matching any word of a question brings in noise. Lowering the weight only brought it level with vector search, and on the 10 keyword-style questions every configuration tied, so exact terms such as `TCC` and `ECCIF` did not need full-text search either. Vector search is the default because it is simpler and scored best on Hit@6. Hybrid stays available through the `mode` argument of `search`.
+I expected hybrid search to win clearly, and built it first. It did not. Equal-weight fusion finds one more document but ranks far worse at the top, because matching any word of a question brings in noise. Lowering the weight only brought it level with vector search. The gaps at the top are one question each, so vector search stays the default because it is simpler. Hybrid is available through the `mode` argument of `search`.
 
-Read these numbers with care. I wrote the questions myself after reading the pages, the set is small (one question is worth about 0.02), and the text weight was chosen on the same questions it is reported on. They measure whether the right document was found, not whether a written answer is correct.
+I wrote these questions myself after reading the pages, the set is small, and the text weight was chosen on the same questions.
 
 ## Running it
 
@@ -65,7 +90,7 @@ cd backend
 python -m venv .venv
 .venv/Scripts/activate            # macOS or Linux: source .venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example .env              # then set DATABASE_URL, and ANTHROPIC_API_KEY for written answers
+cp .env.example .env              # then set DATABASE_URL, and ANTHROPIC_API_KEY if you have one
 python -m app.ingest              # downloads the pages and builds the index
 uvicorn app.main:app --port 8000
 ```
@@ -80,9 +105,10 @@ Run the checks with `pytest` and `ruff check .` in `backend/`, and `npm test` in
 
 ## Limitations
 
-- **The sources are summaries, not the law.** The Kenya Law website does not serve automated clients, so the Acts themselves are not included. The KRA pages can lag behind a new Finance Act.
-- **There are gaps.** Some answers are missing from the pages that can be fetched. For example, the SHA contribution rate is not in the ingested text, and the SHA FAQ page loads through JavaScript, so it is not included. The assistant should say it does not know, but no rate will be found.
-- **Off-topic questions still retrieve passages.** Search always returns its closest matches, so declining an unrelated question depends on the model following its instructions. In passages-only mode, an unrelated question simply shows weak matches.
-- **Written answers are untested against the live API.** Tests use a fake client, and the interface was checked with a simulated stream. Answer quality has not been measured.
-- **It keeps no conversation history.** Each question stands alone.
+- **Local answers quote, they do not explain.** Without a key the chatbot returns official sentences, which can read stiffly or include a stray line from a list. Plain-language explanations need the API key.
+- **Answers with Claude are untested against the live API.** Tests use a fake client.
+- **The sources are summaries, not the law.** The Kenya Law website does not serve automated clients, so the Acts themselves are not included, and the KRA pages can lag behind a new Finance Act.
+- **There are gaps.** The SHA contribution rate is not in the pages that can be fetched, and the SHA FAQ page loads through JavaScript, so the chatbot declines those questions.
+- **Each question stands alone.** A follow-up such as "and for landlords?" is not read with the question before it.
+- **Chats last until the page is reloaded.** Nothing is stored between visits.
 - **It is not advice.** Confirm anything important with the agency or a qualified professional.

@@ -6,10 +6,11 @@ from pathlib import Path
 
 from app.db import connect
 from app.embeddings import get_embedder
+from app.main import PASSAGES
 from app.retrieval import TEXT_WEIGHT, search
 
 QUESTIONS = Path(__file__).parent.parent / "eval" / "questions.json"
-TOP_K = 6  # the number of passages the chat API hands to the model
+TOP_K = PASSAGES
 CONFIGURATIONS = [
     ("vector", {"mode": "vector"}),
     ("text", {"mode": "text"}),
