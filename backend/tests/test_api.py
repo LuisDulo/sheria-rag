@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main
+from app.answer import NOT_COVERED
 from app.embeddings import get_embedder
 from app.main import answer_client, app
 from app.retrieval import Passage
@@ -44,6 +45,23 @@ def test_streams_the_answer_then_done(api):
 def test_sources_are_not_sent_to_the_client(api):
     use_model(FakeClient(["File by the 9th."]))
     assert "x.test" not in api.post("/api/chat", json={"question": "When is PAYE due?"}).text
+
+
+def test_without_a_key_it_still_answers(api, monkeypatch):
+    monkeypatch.setattr(main, "local_answer", lambda q, p, e: "File returns by the ninth day.")
+    use_model(None)
+    events = parse(api.post("/api/chat", json={"question": "When is PAYE due?"}).text)
+    assert "".join(data["text"] for name, data in events if name == "delta") == (
+        "File returns by the ninth day."
+    )
+    assert events[-1] == ("done", {})
+
+
+def test_without_a_key_it_declines_what_the_pages_do_not_cover(api, monkeypatch):
+    monkeypatch.setattr(main, "local_answer", lambda q, p, e: None)
+    use_model(None)
+    events = parse(api.post("/api/chat", json={"question": "Who won the cup?"}).text)
+    assert "".join(data["text"] for name, data in events if name == "delta") == NOT_COVERED
 
 
 def test_model_failure_arrives_as_an_error_event(api):

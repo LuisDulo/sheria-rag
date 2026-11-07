@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import Iterator
 from typing import Annotated, Any
 
@@ -6,14 +7,16 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.answer import get_client, stream_answer
+from app.answer import NOT_COVERED, get_client, stream_answer
 from app.config import get_settings
 from app.db import connect
 from app.embeddings import Embedder, get_embedder
+from app.local_answer import local_answer
 from app.retrieval import Field as SearchField
 from app.retrieval import Passage, search
 
-NO_KEY_MESSAGE = "Written answers are switched off because no API key is set."
+PASSAGES = 12
+WORDS_PER_DELTA = 3
 
 app = FastAPI(title="Sheria RAG")
 
@@ -25,7 +28,7 @@ class ChatRequest(BaseModel):
 
 def find_passages(question: str, field: SearchField | None, embedder: Embedder) -> list[Passage]:
     with connect() as conn:
-        return search(conn, embedder, question, field=field)
+        return search(conn, embedder, question, limit=PASSAGES, field=field)
 
 
 def answer_client():
@@ -37,10 +40,20 @@ def sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-def chat_events(question: str, passages: list[Passage], client) -> Iterator[str]:
+def local_events(question: str, passages: list[Passage], embedder: Embedder) -> Iterator[str]:
+    """Send a local answer in small pieces, so it arrives the same way as a model's."""
+    answer = local_answer(question, passages, embedder) or NOT_COVERED
+    pieces = re.findall(r"\s*\S+", answer)
+    for start in range(0, len(pieces), WORDS_PER_DELTA):
+        yield sse("delta", {"text": "".join(pieces[start : start + WORDS_PER_DELTA])})
+    yield sse("done", {})
+
+
+def chat_events(
+    question: str, passages: list[Passage], client, embedder: Embedder
+) -> Iterator[str]:
     if client is None:
-        yield sse("delta", {"text": NO_KEY_MESSAGE})
-        yield sse("done", {})
+        yield from local_events(question, passages, embedder)
         return
     for event in stream_answer(question, passages, client):
         kind = event.pop("type")
@@ -62,7 +75,7 @@ def chat(
     # and no connection is held open while the model streams.
     passages = find_passages(request.question, request.field, embedder)
     return StreamingResponse(
-        chat_events(request.question, passages, client),
+        chat_events(request.question, passages, client, embedder),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
