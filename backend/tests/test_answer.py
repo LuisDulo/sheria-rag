@@ -9,8 +9,8 @@ from app.answer import (
     REFUSED,
     TRUNCATED,
     build_user_message,
-    cited_numbers,
     stream_answer,
+    to_keyboard,
 )
 from app.retrieval import Passage
 
@@ -60,11 +60,10 @@ def text_of(events):
     return "".join(event["text"] for event in events if event["type"] == "delta")
 
 
-def test_streams_text_then_reports_valid_citations():
-    client = FakeClient(["File by the 9th ", "[1]."])
-    events = list(stream_answer("When?", PASSAGES, client))
-    assert text_of(events) == "File by the 9th [1]."
-    assert events[-1] == {"type": "done", "cited": [1]}
+def test_streams_text_then_finishes():
+    events = list(stream_answer("When?", PASSAGES, FakeClient(["File by ", "the 9th."])))
+    assert text_of(events) == "File by the 9th."
+    assert events[-1] == {"type": "done"}
 
 
 def test_no_passages_answers_without_calling_the_model():
@@ -74,8 +73,13 @@ def test_no_passages_answers_without_calling_the_model():
     assert client.requests == []
 
 
-def test_invented_citation_numbers_are_ignored():
-    assert cited_numbers("See [2], [9], [0] and [2] again, then [1].", 2) == [2, 1]
+def test_answer_text_stays_on_the_keyboard():
+    events = list(stream_answer("Q", PASSAGES, FakeClient(["It\u2019s due \u2014 soon"])))
+    assert text_of(events) == "It's due - soon"
+
+
+def test_to_keyboard_drops_what_it_cannot_replace():
+    assert to_keyboard("\u2022 Pay \U0001f600now") == "- Pay now"
 
 
 def test_request_carries_the_question_passages_and_cached_system_prompt():
@@ -84,7 +88,7 @@ def test_request_carries_the_question_passages_and_cached_system_prompt():
     request = client.requests[0]
     content = request["messages"][0]["content"]
     assert "When is PAYE due?" in content
-    assert "[2] KRA: VAT" in content
+    assert "KRA: VAT" in content
     assert request["system"][0]["cache_control"] == {"type": "ephemeral"}
 
 
@@ -101,9 +105,8 @@ def test_refusal_is_reported_as_an_error():
 
 
 def test_truncated_answer_says_so():
-    events = list(stream_answer("Q", PASSAGES, FakeClient(["Part [1]"], "max_tokens")))
+    events = list(stream_answer("Q", PASSAGES, FakeClient(["Part"], "max_tokens")))
     assert text_of(events).endswith(TRUNCATED)
-    assert events[-1]["cited"] == [1]
 
 
 def test_rate_limit_gives_a_friendly_message():
