@@ -7,4 +7,5 @@ pgvector==0.5.1
 psycopg[binary]==3.3.8
 pydantic-settings==2.16.2
 pypdf==7.0.0
+truststore==0.10.5
 uvicorn[standard]==0.54.0

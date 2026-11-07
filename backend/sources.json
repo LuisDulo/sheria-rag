@@ -1,0 +1,22 @@
+[
+  {"agency": "KRA", "title": "Pay As You Earn (PAYE)", "url": "https://www.kra.go.ke/individual/filing-paying/types-of-taxes/paye", "selector": ".sticky-content"},
+  {"agency": "KRA", "title": "Individual Income Tax", "url": "https://www.kra.go.ke/individual/filing-paying/types-of-taxes/individual-income-tax", "selector": ".sticky-content"},
+  {"agency": "KRA", "title": "Value Added Tax", "url": "https://www.kra.go.ke/individual/filing-paying/types-of-taxes/value-added-tax", "selector": ".sticky-content"},
+  {"agency": "KRA", "title": "Turnover Tax", "url": "https://www.kra.go.ke/individual/filing-paying/types-of-taxes/turnover-tax-tot", "selector": ".sticky-content"},
+  {"agency": "KRA", "title": "Residential Rental Income", "url": "https://www.kra.go.ke/individual/filing-paying/types-of-taxes/residential-rental-income", "selector": ".sticky-content"},
+  {"agency": "KRA", "title": "Capital Gains Tax", "url": "https://www.kra.go.ke/individual/filing-paying/types-of-taxes/capital-gains-tax", "selector": ".sticky-content"},
+  {"agency": "KRA", "title": "Withholding Tax", "url": "https://www.kra.go.ke/individual/filing-paying/types-of-taxes/individual-withholding-tax", "selector": ".sticky-content"},
+  {"agency": "KRA", "title": "Installment Tax", "url": "https://www.kra.go.ke/individual/filing-paying/types-of-taxes/installment-tax", "selector": ".sticky-content"},
+  {"agency": "KRA", "title": "Advance Tax", "url": "https://www.kra.go.ke/individual/filing-paying/types-of-taxes/advance-tax", "selector": ".sticky-content"},
+  {"agency": "KRA", "title": "Tax Compliance", "url": "https://www.kra.go.ke/individual/filing-paying/types-of-taxes/tax-compliance", "selector": ".sticky-content"},
+  {"agency": "SHA", "title": "About the Social Health Authority", "url": "https://www.sha.go.ke/aboutus/", "selector": "[data-elementor-type=wp-page], [data-elementor-type=wp-post]"},
+  {"agency": "SHA", "title": "Benefit Tariffs", "url": "https://www.sha.go.ke/benefit-tariffs/", "selector": "[data-elementor-type=wp-page], [data-elementor-type=wp-post]"},
+  {"agency": "SHA", "title": "Register", "url": "https://www.sha.go.ke/register/", "selector": "[data-elementor-type=wp-page], [data-elementor-type=wp-post]"},
+  {"agency": "SHA", "title": "Means Testing", "url": "https://www.sha.go.ke/means-testing/", "selector": "[data-elementor-type=wp-page], [data-elementor-type=wp-post]"},
+  {"agency": "HELB", "title": "Repay Your Loan", "url": "https://www.helb.co.ke/repay-loan/", "selector": "[data-elementor-type=wp-page], [data-elementor-type=wp-post]"},
+  {"agency": "HELB", "title": "Compliance Certificate", "url": "https://www.helb.co.ke/compliance-certificate/", "selector": "[data-elementor-type=wp-page], [data-elementor-type=wp-post]"},
+  {"agency": "HELB", "title": "Undergraduate Loans", "url": "https://www.helb.co.ke/helb-products/helb-loans/undergraduate-loans/", "selector": "[data-elementor-type=wp-page], [data-elementor-type=wp-post]"},
+  {"agency": "HELB", "title": "TVET Loans", "url": "https://www.helb.co.ke/helb-products/helb-loans/tvet-loans/", "selector": "[data-elementor-type=wp-page], [data-elementor-type=wp-post]"},
+  {"agency": "HELB", "title": "Loanee FAQs", "url": "https://www.helb.co.ke/faqs/loanees-faqs/", "selector": "[data-elementor-type=wp-page], [data-elementor-type=wp-post]"},
+  {"agency": "HELB", "title": "Student FAQs", "url": "https://www.helb.co.ke/faqs/students-faqs/", "selector": "[data-elementor-type=wp-page], [data-elementor-type=wp-post]"}
+]
