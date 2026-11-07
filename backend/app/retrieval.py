@@ -9,6 +9,7 @@ from app.embeddings import Embedder
 
 Mode = Literal["vector", "text", "hybrid"]
 RRF_K = 60  # the constant from the original reciprocal rank fusion paper
+TEXT_WEIGHT = 0.1  # the best hybrid weight in the benchmark; see the README
 
 
 @dataclass
@@ -49,12 +50,12 @@ def text_ranking(conn: psycopg.Connection, query: str, limit: int) -> list[int]:
     return [row[0] for row in rows]
 
 
-def fuse(rankings: list[list[int]], limit: int) -> list[int]:
-    """Reciprocal rank fusion: reward items that rank well in any list, without tuning scores."""
+def fuse(rankings: list[tuple[list[int], float]], limit: int) -> list[int]:
+    """Weighted reciprocal rank fusion over (ranking, weight) pairs."""
     scores: dict[int, float] = {}
-    for ranking in rankings:
+    for ranking, weight in rankings:
         for rank, chunk_id in enumerate(ranking, start=1):
-            scores[chunk_id] = scores.get(chunk_id, 0.0) + 1 / (RRF_K + rank)
+            scores[chunk_id] = scores.get(chunk_id, 0.0) + weight / (RRF_K + rank)
     return sorted(scores, key=lambda chunk_id: (-scores[chunk_id], chunk_id))[:limit]
 
 
@@ -76,12 +77,13 @@ def search(
     embedder: Embedder,
     query: str,
     limit: int = 6,
-    mode: Mode = "hybrid",
+    mode: Mode = "vector",  # measured best on the benchmark; hybrid did not improve on it
     pool: int = 30,
+    text_weight: float = TEXT_WEIGHT,
 ) -> list[Passage]:
     rankings = []
     if mode in ("vector", "hybrid"):
-        rankings.append(vector_ranking(conn, embedder.embed_query(query), pool))
+        rankings.append((vector_ranking(conn, embedder.embed_query(query), pool), 1.0))
     if mode in ("text", "hybrid"):
-        rankings.append(text_ranking(conn, query, pool))
+        rankings.append((text_ranking(conn, query, pool), text_weight))
     return load_passages(conn, fuse(rankings, limit))
