@@ -6,4 +6,4 @@ __pycache__/
 .env
 node_modules/
 dist/
-data/raw/
+**/data/raw/
