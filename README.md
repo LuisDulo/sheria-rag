@@ -4,6 +4,10 @@ A chatbot for Kenyan tax, health-cover and student-loan rules. You choose a topi
 
 It is built around one rule: answer only from the official pages, and say so when they do not cover a question.
 
+![Sheria answering two HELB questions](docs/screenshots/03-student-loans-answers.png)
+
+**Screenshots:** the topic picker, answers for each topic, a question outside the guidance and the phone layout are in [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md) (also as a [Word document](docs/Sheria_RAG_Screenshots.docx)).
+
 ## How it works
 
 ```mermaid
